@@ -1,0 +1,840 @@
+Source Code:
+  package com.suryaditya.business.domain;
+
+import java.util.Date;
+
+public class MovieScreening {
+    private String movieName;
+    private String moviePosterURL;
+    private long theatreId;
+    private String theatreName;
+    private String theatreCity;
+    private String screeningDate;
+    private String screeningTime;
+    private int numSeats;
+
+    public String getMoviePosterURL() {
+        return moviePosterURL;
+    }
+
+    public void setMoviePosterURL(String moviePosterURL) {
+        this.moviePosterURL = moviePosterURL;
+    }
+
+    public int getNumSeats() {
+        return numSeats;
+    }
+
+    public void setNumSeats(int numSeats) {
+        this.numSeats = numSeats;
+    }
+
+    public String getScreeningDate() {
+        return screeningDate;
+    }
+
+    public void setScreeningDate(String screeningDate) {
+        this.screeningDate = screeningDate;
+    }
+
+    public String getScreeningTime() {
+        return screeningTime;
+    }
+
+    public void setScreeningTime(String screeningTime) {
+        this.screeningTime = screeningTime;
+    }
+
+    public String getMovieName() {
+        return movieName;
+    }
+
+    public void setMovieName(String movieName) {
+        this.movieName = movieName;
+    }
+
+    public long getTheatreId() {
+        return theatreId;
+    }
+
+    public void setTheatreId(long theatreId) {
+        this.theatreId = theatreId;
+    }
+
+    public String getTheatreName() {
+        return theatreName;
+    }
+
+    public void setTheatreName(String theatreName) {
+        this.theatreName = theatreName;
+    }
+
+    public String getTheatreCity() {
+        return theatreCity;
+    }
+
+    public void setTheatreCity(String theatreCity) {
+        this.theatreCity = theatreCity;
+    }
+}
+
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.data.entity.*;
+import com.suryaditya.data.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+@Service
+public class ScreeningService {
+    private ScreeningRepository screeningRepository;
+    private MovieRepository movieRepository;
+    private TheatreRepository theatreRepository;
+    private TicketRepository ticketRepository;
+    private ScreenRepository screenRepository;
+
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+
+    public ScreeningService(ScreeningRepository screeningRepository, MovieRepository movieRepository, TheatreRepository theatreRepository
+                            , TicketRepository ticketRepository, ScreenRepository screenRepository) {
+        this.screeningRepository = screeningRepository;
+        this.movieRepository = movieRepository;
+        this.theatreRepository = theatreRepository;
+        this.ticketRepository = ticketRepository;
+        this.screenRepository = screenRepository;
+    }
+
+    private Screening getScreening(MovieScreening movieScreening) {
+        Theatre theatre = theatreRepository.findByTheatreNameAndTheatreCity(movieScreening.getTheatreName(), movieScreening.getTheatreCity());
+        if (theatre == null)
+            return null;
+        return screeningRepository.findByMovieNameAndTheatreIdAndScreeningDateAndScreeningTime(movieScreening.getMovieName(), theatre.getTheatreId(),
+                java.sql.Date.valueOf(movieScreening.getScreeningDate()), java.sql.Time.valueOf(movieScreening.getScreeningTime()));
+    }
+
+    public int bookSeats(MovieScreening movieScreening, int seats) {
+        Screening screening = getScreening(movieScreening);
+        screening.setBookedTickets(seats);
+        screeningRepository.save(screening);
+        return getBookedSeats(movieScreening);
+    }
+
+    public int getBookedSeats(MovieScreening movieScreening) {
+        Screening screening = getScreening(movieScreening);
+        return screening.getBookedTickets();
+    }
+
+    public int getTotalSeats(MovieScreening movieScreening) {
+        Screening screening = getScreening(movieScreening);
+        long screenId = screening.getScreenId();
+        return screenRepository.findByScreenId(screenId).getSeatsNum();
+    }
+
+    public Set<Movie> getMoviesByDate(Date date) {
+        Iterable<Screening> screenings = this.screeningRepository.findByScreeningDate(new java.sql.Date(date.getTime()));
+        Set<Movie> movies = new HashSet<>();
+
+        if (screenings != null) {
+            for (Screening screening : screenings) {
+                Movie movie = movieRepository.findByMovieName(screening.getMovieName());
+                movies.add(movie);
+            }
+        }
+
+        return movies;
+    }
+
+    public List<Screening> getScreeningsByMovie(String movieName) {
+        return this.screeningRepository.findByMovieName(movieName);
+    }
+
+    public List<MovieScreening> getMovieScreeningsByMovie(String movieName) {
+        Iterable<Screening> screenings = this.screeningRepository.findByMovieName(movieName);
+        List<MovieScreening> movieScreenings = new ArrayList<>();
+
+        if (screenings != null) {
+            for (Screening screening : screenings) {
+                MovieScreening movieScreening = new MovieScreening();
+                Theatre theatre = theatreRepository.findByTheatreId(screening.getTheatreId());
+                Movie movie = movieRepository.findByMovieName(screening.getMovieName());
+
+                movieScreening.setMovieName(screening.getMovieName());
+                movieScreening.setMoviePosterURL(movie.getMoviePosterUrl());
+
+                if (theatre != null) {
+                    movieScreening.setTheatreId(theatre.getTheatreId());
+                    movieScreening.setTheatreName(theatre.getTheatreName());
+                    movieScreening.setTheatreCity(theatre.getTheatreCity());
+                }
+
+
+                movieScreening.setScreeningDate(screening.getScreeningDate().toString());
+                movieScreening.setScreeningTime(screening.getScreeningTime().toString());
+
+                movieScreenings.add(movieScreening);
+            }
+        }
+
+        return movieScreenings;
+    }
+}
+
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.business.domain.MovieScreening;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+import static org.junit.Assert.*;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+public class ScreeningServiceIntegrationTest {
+
+    @Autowired
+    ScreeningService screeningService;
+
+    @Test
+    public void testBookSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Race 3");
+        aMovieScreening.setScreeningDate("2018-05-25");
+        aMovieScreening.setScreeningTime("18:00:00");
+        aMovieScreening.setTheatreCity("PUNE");
+        aMovieScreening.setTheatreName("INOX");
+        aMovieScreening.setNumSeats(5);
+
+        int expectedBookedSeats = screeningService.getBookedSeats(aMovieScreening)+5;
+
+        int actualBookedSeats = screeningService.bookSeats(aMovieScreening, expectedBookedSeats);
+
+        assertEquals(actualBookedSeats, expectedBookedSeats);
+    }
+
+    @Test
+    public void testGetBookedSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Race 3");
+        aMovieScreening.setScreeningDate("2018-05-25");
+        aMovieScreening.setScreeningTime("18:00:00");
+        aMovieScreening.setTheatreCity("PUNE");
+        aMovieScreening.setTheatreName("INOX");
+
+        assertEquals(5, screeningService.getBookedSeats(aMovieScreening));
+    }
+
+    @Test
+    public void testGetTotalSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Race 3");
+        aMovieScreening.setScreeningDate("2018-05-25");
+        aMovieScreening.setScreeningTime("18:00:00");
+        aMovieScreening.setTheatreCity("PUNE");
+        aMovieScreening.setTheatreName("INOX");
+
+        assertEquals(100, screeningService.getTotalSeats(aMovieScreening));
+    }
+
+    @Test
+    public void getMovieScreeningsByDate() {
+    }
+}
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.data.entity.Screening;
+import com.suryaditya.data.entity.Theatre;
+import com.suryaditya.data.repository.ScreeningRepository;
+import com.suryaditya.data.repository.TheatreRepository;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.runners.MockitoJUnitRunner;
+import org.springframework.boot.test.context.SpringBootTest;
+import static org.junit.Assert.*;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Mockito.when;
+
+@RunWith(MockitoJUnitRunner.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+public class ScreeningServiceUnitTest {
+    @Mock
+    private ScreeningRepository screeningRepository;
+
+    @Mock
+    private TheatreRepository theatreRepository;
+
+    @InjectMocks
+    private ScreeningService screeningService;
+
+    @Before
+    public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testBookSeats() {
+        Theatre aMockTheatre = new Theatre();
+        aMockTheatre.setTheatreName("INOX");
+        aMockTheatre.setTheatreCity("PUNE");
+        aMockTheatre.setTheatreId(2);
+
+        when(theatreRepository.findByTheatreNameAndTheatreCity(anyString(), anyString())).thenReturn(aMockTheatre);
+
+        Screening aMockScreening = new Screening();
+        aMockScreening.setMovieName("Race 3");
+        aMockScreening.setScreenId(2);
+        aMockScreening.setScreeningDate(java.sql.Date.valueOf("2018-05-25"));
+        aMockScreening.setScreeningTime(java.sql.Time.valueOf("18:00:00"));
+        aMockScreening.setScreeningId(1);
+        aMockScreening.setBookedTickets(0);
+
+        when(screeningRepository.findByMovieNameAndTheatreIdAndScreeningDateAndScreeningTime(any(String.class),
+                any(Long.class), java.sql.Date.valueOf(any(String.class)), java.sql.Time.valueOf(any(String.class)))).thenReturn(aMockScreening);
+
+        MovieScreening aMovieScreening = new MovieScreening();
+
+        int actualBookedSeats = screeningService.bookSeats(aMovieScreening, 5);
+
+        assertEquals(actualBookedSeats, 5);
+    }
+
+    @Test
+    public void testGetBookedSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+
+        assertEquals(5, screeningService.getBookedSeats(aMovieScreening));
+    }
+
+    @Test
+    public void testGetTotalSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+
+        assertEquals(100, screeningService.getTotalSeats(aMovieScreening));
+    }
+
+    @Test
+    public void getMovieScreeningsByDate() {
+    }
+}
+
+package com.suryaditya.business.service;
+
+public interface SecurityService {
+    String findLoggedInUsername();
+
+    void autologin(String username, String password);
+}
+
+package com.suryaditya.business.service;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SecurityServiceImpl implements SecurityService {
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
+
+    private static final Logger logger = LoggerFactory.getLogger(SecurityServiceImpl.class);
+
+    @Override
+    public String findLoggedInUsername() {
+        Object userDetails = SecurityContextHolder.getContext().getAuthentication().getDetails();
+        if (userDetails instanceof UserDetails) {
+            return ((UserDetails)userDetails).getUsername();
+        }
+
+        return null;
+    }
+
+    @Override
+    public void autologin(String username, String password) {
+        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(userDetails, password, userDetails.getAuthorities());
+
+        authenticationManager.authenticate(usernamePasswordAuthenticationToken);
+
+        if (usernamePasswordAuthenticationToken.isAuthenticated()) {
+            SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+            logger.debug(String.format("Auto login %s successfully!", username));
+        }
+    }
+}
+
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.data.entity.User;
+import com.suryaditya.data.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService {
+    @Autowired
+    private UserRepository userRepository;
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username);
+
+        Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
+        /*Set<GrantedAuthority> grantedAuthorities = new HashSet<>();
+        for (Role role : user.getRoles()){
+            grantedAuthorities.add(new SimpleGrantedAuthority(role.getName()));
+        }*/
+
+        return new org.springframework.security.core.userdetails.User(user.getUsername(), user.getPassword(), grantedAuthorities);
+    }
+}
+
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.data.entity.User;
+
+public interface UserService {
+    void save(User user);
+
+    User findByUsername(String username);
+}
+
+
+package com.suryaditya.business.service;
+
+import com.suryaditya.data.entity.User;
+import com.suryaditya.data.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserServiceImpl implements UserService {
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private BCryptPasswordEncoder bCryptPasswordEncoder;
+
+    @Override
+    public void save(User user) {
+        user.setPassword(bCryptPasswordEncoder.encode(user.getPassword()));
+        userRepository.save(user);
+    }
+
+    @Override
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username);
+    }
+}
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.business.service.ScreeningService;
+import com.suryaditya.data.entity.Movie;
+import com.suryaditya.data.entity.Screening;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.validation.Valid;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
+
+@Controller
+@RequestMapping("/movies")
+public class MovieController {
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+
+    @Autowired
+    private ScreeningService screeningService;
+
+    @RequestMapping(method = RequestMethod.GET)
+    public String getMovies(@RequestParam(value = "date", required = false)String dateString, Model model) {
+        Date date = null;
+        if (dateString != null) {
+            try {
+                date = DATE_FORMAT.parse(dateString);
+
+            } catch (ParseException pe) {
+                date = new Date();
+            }
+        } else {
+            date = new Date();
+        }
+
+        Set<Movie> result = this.screeningService.getMoviesByDate(date);
+        model.addAttribute("movies", result);
+        model.addAttribute("movieBooking", new MovieScreening());
+        return "movies";
+    }
+}
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.business.service.ScreeningService;
+import com.suryaditya.data.entity.Movie;
+import com.suryaditya.data.entity.Screening;
+import com.suryaditya.data.entity.Ticket;
+import com.suryaditya.data.repository.MovieRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.validation.Valid;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
+
+@Controller
+@RequestMapping("/screenings")
+public class ScreeningController {
+    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+
+    @Autowired
+    private MovieRepository movieRepository;
+
+    @Autowired
+    private ScreeningService screeningService;
+
+    @RequestMapping(method = RequestMethod.GET)
+    public String getScreenings(@RequestParam(value = "movie", required = true)String movieString, Model model) {
+        List<MovieScreening> result = this.screeningService.getMovieScreeningsByMovie(movieString);
+        model.addAttribute("screenings", result);
+        model.addAttribute("movie", movieRepository.findByMovieName(movieString));
+        return "screenings";
+    }
+
+    @RequestMapping(method = RequestMethod.POST)
+    public String bookSeats(@Valid @ModelAttribute MovieScreening movieBooking) {
+
+        LOGGER.info(movieBooking.getMovieName());
+        LOGGER.info(movieBooking.getTheatreCity());
+        LOGGER.info(movieBooking.getTheatreName());
+        LOGGER.info(movieBooking.getScreeningTime());
+        LOGGER.info(movieBooking.getScreeningDate());
+        LOGGER.info(Integer.toString(movieBooking.getNumSeats()));
+
+        int bookedSeats = this.screeningService.getBookedSeats(movieBooking);
+        int totalSeats = this.screeningService.getTotalSeats(movieBooking);
+
+        if ((bookedSeats+movieBooking.getNumSeats()) > totalSeats)
+            return "error";
+
+        this.screeningService.bookSeats(movieBooking, bookedSeats+movieBooking.getNumSeats());
+
+        return "result";
+    }
+}
+
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.domain.MovieScreening;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+import static org.junit.Assert.*;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+public class ScreeningControllerIntegrationTest {
+
+    @Autowired
+    ScreeningController screeningController;
+
+    @Test
+    public void getScreenings() {
+    }
+
+    @Test
+    public void testBookSeats() {
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Race 3");
+        aMovieScreening.setScreeningDate("2018-05-25");
+        aMovieScreening.setScreeningTime("18:00:00");
+        aMovieScreening.setTheatreCity("PUNE");
+        aMovieScreening.setTheatreName("INOX");
+        aMovieScreening.setNumSeats(5);
+
+        String result = screeningController.bookSeats(aMovieScreening);
+
+        assertEquals(result, "result");
+    }
+
+    @Test
+    public void testBookSeatsExceedCapacity() {
+        /* Theatre capacity set to 100 in data.sql */
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Race 3");
+        aMovieScreening.setScreeningDate("2018-05-25");
+        aMovieScreening.setScreeningTime("18:00:00");
+        aMovieScreening.setTheatreCity("PUNE");
+        aMovieScreening.setTheatreName("INOX");
+        aMovieScreening.setNumSeats(96);
+
+        String result = screeningController.bookSeats(aMovieScreening);
+
+        assertEquals(result, "error");
+    }
+}
+
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.business.service.ScreeningService;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@WebMvcTest(ScreeningController.class)
+public class ScreeningControllerUnitTest {
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+    @MockBean
+    private ScreeningService screeningService;
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    @Ignore
+    public void getScreenings() throws Exception {
+        this.mockMvc.perform(get("/screenings?date=2018-05-25")).andDo(print()).andExpect(status().isOk()).andExpect(content().string(containsString("")));
+
+    }
+
+    @Test
+    public void testBookSeats() throws Exception {
+        MovieScreening aMovieScreening = new MovieScreening();
+        aMovieScreening.setMovieName("Pataakha");
+        aMovieScreening.setScreeningDate("2018-09-27");
+        aMovieScreening.setScreeningTime("21:00:00");
+        aMovieScreening.setTheatreCity("Pune");
+        aMovieScreening.setTheatreName("Inox");
+        aMovieScreening.setNumSeats(500);
+
+        this.mockMvc.perform(post("/screenings", aMovieScreening)).andExpect(status().isOk())
+        .andExpect(view().name("result"));
+    }
+}
+
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.domain.MovieScreening;
+import com.suryaditya.business.service.ScreeningService;
+import com.suryaditya.data.repository.MovieRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.validation.Valid;
+import java.util.List;
+
+@Controller
+@RequestMapping("/seats")
+public class SeatsController {
+    private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+
+    @RequestMapping(method = RequestMethod.GET)
+    public String bookSeats(@RequestParam(value = "count", required = true)int seatCount, Model model) {
+        model.addAttribute("count", seatCount);
+        return "seats";
+    }
+}
+
+
+package com.suryaditya.web.application;
+
+import com.suryaditya.business.service.SecurityService;
+import com.suryaditya.business.service.UserService;
+import com.suryaditya.data.entity.User;
+import com.suryaditya.validator.UserValidator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+
+@Controller
+public class UserController {
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SecurityService securityService;
+
+    @Autowired
+    private UserValidator userValidator;
+
+    @RequestMapping(value = "/registration", method = RequestMethod.GET)
+    public String registration(Model model) {
+        model.addAttribute("userForm", new User());
+
+        return "registration";
+    }
+
+    @RequestMapping(value = "/registration", method = RequestMethod.POST)
+    public String registration(@ModelAttribute("userForm") User userForm, BindingResult bindingResult, Model model) {
+        //userValidator.validate(userForm, bindingResult);
+
+        //if (bindingResult.hasErrors()) {
+        //    return "registration";
+        //}
+
+        userService.save(userForm);
+
+        securityService.autologin(userForm.getUsername(), userForm.getPassword());
+
+        return "welcome";
+    }
+
+    @RequestMapping(value = "/login", method = RequestMethod.GET)
+    public String login(Model model, String error, String logout) {
+        if (error != null)
+            model.addAttribute("error", "Your username and password is invalid.");
+
+        if (logout != null)
+            return "logout";
+
+        return "login";
+    }
+
+    @RequestMapping(value = "/welcome", method = RequestMethod.GET)
+    public String welcome(Model model) {
+        return "welcome";
+    }
+}
+
+
+package com.suryaditya;
+
+import com.suryaditya.business.service.ScreeningServiceIntegrationTest;
+import com.suryaditya.data.repository.ScreeningRepositoryIntegrationTest;
+import com.suryaditya.web.application.ScreeningControllerIntegrationTest;
+import org.junit.runner.RunWith;
+import org.junit.runners.Suite;
+
+@RunWith(Suite.class)
+@Suite.SuiteClasses({ScreeningServiceIntegrationTest.class, ScreeningControllerIntegrationTest.class,
+        ScreeningRepositoryIntegrationTest.class})
+public class MovieScreeningTestSuite {
+}
+
+
+package com.suryaditya;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ReservationsApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ReservationsApplication.class, args);
+	}
+}
+
+
+package com.suryaditya;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class ReservationsApplicationTests {
+
+	@Test
+	public void contextLoads() {
+	}
+}
+
